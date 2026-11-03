@@ -63,3 +63,41 @@ void exibir_status(const Pokemon *p) {
     }
     printf("] %d/%d\n\n", p->vida_atual, p->vida_max);
 }
+
+// Golpe usado quando o Pokemon nao tem nenhum ataque cadastrado.
+static Ataque ataque_basico = {"Investida", 40, "Normal"};
+
+int ler_opcao(int min, int max) {
+    char buf[32];
+    int op;
+
+    while (1) {
+        if (fgets(buf, sizeof(buf), stdin) == NULL) return min;  // EOF
+        if (sscanf(buf, "%d", &op) == 1 && op >= min && op <= max) {
+            return op;
+        }
+        printf("Opcao invalida! Digite um numero entre %d e %d: ", min, max);
+    }
+}
+
+// Retorna o indice (0 a MAX_ATAQUES-1) do ataque escolhido,
+// ou -1 se o Pokemon nao tem ataques (nesse caso usa-se o golpe basico).
+// Slot vazio: nome[0] == '\0'.
+int escolher_ataque(const Pokemon *p) {
+    int validos = 0;
+
+    printf("Escolha o ataque:\n");
+    for (int i = 0; i < MAX_ATAQUES; i++) {
+        if (p->ataques[i].nome[0] != '\0') {
+            printf("%d - %s (%s, poder %d)\n", i + 1,
+                   p->ataques[i].nome, p->ataques[i].tipo, p->ataques[i].poder);
+            validos = i + 1;
+        }
+    }
+    if (validos == 0) {
+        printf("%s nao tem ataques! Usando %s.\n", p->nome, ataque_basico.nome);
+        return -1;
+    }
+    printf("> ");
+    return ler_opcao(1, validos) - 1;
+}
