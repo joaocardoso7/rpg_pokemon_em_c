@@ -10,4 +10,7 @@ int tentar_captura(Treinador *t, Pokemon *selvagem);
 
 void exibir_status(const Pokemon *p);
 
+int ler_opcao(int min, int max);
+int escolher_ataque(const Pokemon *p);
+
 #endif
