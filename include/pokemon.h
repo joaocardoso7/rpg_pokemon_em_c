@@ -21,6 +21,7 @@ typedef struct {
     int nivel;
     int ataque;
     int defesa;
+    int xp;
     Ataque ataques[MAX_ATAQUES];
 } Pokemon;
 
