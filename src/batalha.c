@@ -18,10 +18,13 @@ float multiplicador_tipo(const char *tipo_golpe, const char *tipo_defensor) {
     return 1.0f;
 }
 
+// Com stats pequenos (~10) o divisor classico (50) zerava o dano; ajuste aqui para balancear
+#define DIVISOR_DANO 10
+
 // Formula de dano baseada no nivel, ataque e defesa
 int calcular_dano(Pokemon *atacante, Pokemon *defensor, Ataque *golpe) {
     int def = defensor->defesa > 0 ? defensor->defesa : 1;
-    int base = (2 * atacante->nivel / 5 + 2) * golpe->poder * atacante->ataque / def / 50 + 2;
+    int base = (2 * atacante->nivel / 5 + 2) * golpe->poder * atacante->ataque / def / DIVISOR_DANO + 2;
     int dano = (int)(base * multiplicador_tipo(golpe->tipo, defensor->tipo));
     
     if (dano < 1) dano = 1; // dano minimo garantido
@@ -83,7 +86,7 @@ void exibir_status(const Pokemon *p) {
     printf("----------------------------------------\n");
 }
 
-static Ataque ataque_basico = {"Investida", 40, "Normal"};
+static Ataque ataque_basico = {"Investida", 8, "Normal"};
 
 // Leitor local com buffer isolado para evitar conflito com main.c
 static int ler_opcao_batalha(int min, int max) {
@@ -180,6 +183,50 @@ static Pokemon *primeiro_vivo(Treinador *t) {
     return NULL;
 }
 
+// ---------- Experiencia e nivel ----------
+#define XP_POR_VITORIA(nv_inimigo) ((nv_inimigo) * 10)
+#define XP_PARA_PROXIMO(nv)        ((nv) * 15)
+#define NIVEL_MAXIMO 100
+
+static void ganhar_xp(Pokemon *p, int xp_ganho) {
+    printf("%s ganhou %d de XP!\n", p->nome, xp_ganho);
+    p->xp += xp_ganho;
+
+    while (p->nivel < NIVEL_MAXIMO && p->xp >= XP_PARA_PROXIMO(p->nivel)) {
+        p->xp -= XP_PARA_PROXIMO(p->nivel);
+        p->nivel++;
+        p->vida_max   += 3;
+        p->vida_atual += 3;
+        p->ataque++;
+        p->defesa++;
+        printf(">>> %s subiu para o nivel %d! (HP max %d | ATK %d | DEF %d) <<<\n",
+               p->nome, p->nivel, p->vida_max, p->ataque, p->defesa);
+    }
+}
+
+// ---------- Troca manual de Pokemon ----------
+// Retorna 1 se trocou (gasta o turno), 0 se cancelou/invalido (nao gasta)
+static int trocar_pokemon(Treinador *t, Pokemon **ativo) {
+    printf("\nEscolha o Pokemon:\n");
+    for (int i = 0; i < t->qtd_pokemon; i++) {
+        printf("  [%d] %s Nv.%d HP %d/%d%s\n", i + 1, t->time[i].nome, t->time[i].nivel,
+               t->time[i].vida_atual, t->time[i].vida_max,
+               &t->time[i] == *ativo ? " (em campo)" : "");
+    }
+    printf("  [0] Cancelar\nEscolha: ");
+
+    int op = ler_opcao_batalha(0, t->qtd_pokemon);
+    if (op == 0) return 0;
+
+    Pokemon *novo = &t->time[op - 1];
+    if (novo == *ativo)       { printf("\n%s ja esta em campo!\n", novo->nome); return 0; }
+    if (novo->vida_atual <= 0) { printf("\n%s esta desmaiado!\n", novo->nome);   return 0; }
+
+    *ativo = novo;
+    printf("\nVoce enviou %s para a batalha!\n", novo->nome);
+    return 1;
+}
+
 int iniciar_batalha(Treinador *t, Pokemon *selvagem) {
     Pokemon *ativo = primeiro_vivo(t);
 
@@ -201,9 +248,10 @@ int iniciar_batalha(Treinador *t, Pokemon *selvagem) {
         printf("  [2] Capturar (Pokebolas: %d)\n", t->pokebolas);
         printf("  [3] Usar Pocao (Pocoes: %d)\n", t->pocoes);
         printf("  [4] Fugir\n");
+        printf("  [5] Trocar Pokemon\n");
         printf("Escolha: ");
 
-        int op = ler_opcao_batalha(1, 4);
+        int op = ler_opcao_batalha(1, 5);
 
         if (op == 1) {
             int idx = escolher_ataque(ativo);
@@ -216,6 +264,7 @@ int iniciar_batalha(Treinador *t, Pokemon *selvagem) {
 
             if (selvagem->vida_atual == 0) {
                 printf("\n>>> VITORIA! O %s selvagem foi derrotado! <<<\n", selvagem->nome);
+                ganhar_xp(ativo, XP_POR_VITORIA(selvagem->nivel));
                 return BATALHA_VITORIA;
             }
         } else if (op == 2) {
@@ -226,6 +275,8 @@ int iniciar_batalha(Treinador *t, Pokemon *selvagem) {
             if (!usar_pocao(t, ativo)) continue; // sem efeito, nao perde turno
         } else if (op == 4) {
             if (tentar_fuga()) return BATALHA_FUGA;
+        } else if (op == 5) {
+            if (!trocar_pokemon(t, &ativo)) continue; // cancelou/invalido: nao perde turno
         }
 
         // Turno de resposta do Pokémon selvagem
